@@ -1,0 +1,7 @@
+[package]
+name = "pinned-vector"
+version = "0.1.0"
+authors = [
+    "Samuel Bergeron-Drouin <sbergerondrouin@devolutions.net>",
+]
+edition = "2021"

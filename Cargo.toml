@@ -1,0 +1,19 @@
+[workspace]
+members = [
+    "pinned-vector",
+]
+
+[package]
+name = "pinned-collections"
+version = "0.1.0"
+authors = [
+    "Samuel Bergeron-Drouin <sbergerondrouin@devolutions.net>",
+]
+edition = "2021"
+publish = false
+
+[features]
+full = ["pinned-vector"]
+
+[dependencies]
+pinned-vector = { path = "./pinned-vector", optional = true }
