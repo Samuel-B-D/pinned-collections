@@ -90,8 +90,6 @@ impl Cap {
 #[allow(missing_debug_implementations)]
 pub(crate) struct RawVec<T> {
     ptr: NonNull<T>,
-    /// Never used for ZSTs; it's `capacity()`'s responsibility to return usize::MAX in that case.
-    ///
     /// # Safety
     ///
     /// `cap` must be in the `0..=isize::MAX` range.
@@ -99,22 +97,18 @@ pub(crate) struct RawVec<T> {
 }
 
 impl<T> RawVec<T> {
-    /// HACK(Centril): This exists because stable `const fn` can only call stable `const fn`, so
-    /// they cannot call `Self::new()`.
-    ///
-    /// If you change `RawVec<T>::new` or dependencies, please take care to not introduce anything
-    /// that would truly const-call something unstable.
-    pub const NEW: Self = Self::new();
-
     /// Creates the biggest possible `RawVec` (on the system heap)
     /// without allocating. If `T` has positive size, then this makes a
     /// `RawVec` with capacity `0`. If `T` is zero-sized, then it makes a
     /// `RawVec` with capacity `usize::MAX`. Useful for implementing
     /// delayed allocation.
     #[must_use]
-    pub const fn new() -> Self {
+    pub fn new() -> Self {
+        // This branch should be stripped at compile time.
+        let cap = if mem::size_of::<T>() == 0 { Cap(usize::MAX) } else { Cap::ZERO };
+
         // `cap: 0` means "unallocated". zero-sized types are ignored.
-        Self { ptr: NonNull::dangling(), cap: Cap::ZERO }
+        Self { ptr: NonNull::dangling(), cap }
     }
 
     /// Creates a `RawVec` (on the system heap) with exactly the
@@ -136,6 +130,7 @@ impl<T> RawVec<T> {
     #[must_use]
     #[inline]
     pub fn with_capacity(capacity: usize) -> Self {
+        assert_ne!(mem::size_of::<T>(), 0, "TODO: implement ZST support");
         match Self::try_allocate(capacity, AllocInit::Uninitialized) {
             Ok(res) => res,
             Err(err) => handle_error(err),
@@ -146,20 +141,11 @@ impl<T> RawVec<T> {
     #[must_use]
     #[inline]
     pub fn with_capacity_zeroed(capacity: usize) -> Self {
+        assert_ne!(mem::size_of::<T>(), 0, "TODO: implement ZST support");
         match Self::try_allocate(capacity, AllocInit::Zeroed) {
             Ok(res) => res,
             Err(err) => handle_error(err),
         }
-    }
-
-    /// Creates a `RawVec` (on the system heap) with exactly the
-    /// capacity and alignment requirements for a `[T; capacity]`. This is
-    /// equivalent to calling `RawVec::new` when `capacity` is `0` or `T` is
-    /// zero-sized. Note that if `T` is zero-sized this means you will
-    /// *not* get a `RawVec` with the requested capacity.
-    #[inline]
-    pub fn try_with_capacity(capacity: usize) -> Result<Self, RawVecError> {
-        Self::try_allocate(capacity, AllocInit::Uninitialized)
     }
 
     // Tiny Vecs are dumb. Skip to:
@@ -334,18 +320,11 @@ impl<T> RawVec<T> {
     /// caller to ensure `len == self.capacity()`.
     #[cfg(not(no_global_oom_handling))]
     #[inline(never)]
-    pub fn grow_one(&mut self) {
-        if let Err(err) = self.grow_amortized(self.cap.0, 1) {
-            handle_error(err.into());
+    pub fn grow_one(&mut self) -> usize {
+        match self.grow_amortized(self.cap.0, 1) {
+            Ok(grew_by) => grew_by,
+            Err(err) => handle_error(err.into()),
         }
-    }
-
-    /// The same as `reserve`, but returns on errors instead of panicking or aborting.
-    pub fn try_reserve(&mut self, len: usize, additional: usize) -> Result<(), RawVecError> {
-        if self.needs_to_grow(len, additional) {
-            self.grow_amortized(len, additional)?;
-        }
-        Ok(())
     }
 
     /// Ensures that the buffer contains at least enough space to hold `len +
@@ -367,21 +346,11 @@ impl<T> RawVec<T> {
     /// Aborts on OOM.
     #[cfg(not(no_global_oom_handling))]
     pub fn reserve_exact(&mut self, len: usize, additional: usize) {
-        if let Err(err) = self.try_reserve_exact(len, additional) {
-            handle_error(err.into());
-        }
-    }
-
-    /// The same as `reserve_exact`, but returns on errors instead of panicking or aborting.
-    pub fn try_reserve_exact(
-        &mut self,
-        len: usize,
-        additional: usize,
-    ) -> Result<(), RawVecError> {
         if self.needs_to_grow(len, additional) {
-            self.grow_exact(len, additional)?;
+            if let Err(err) = self.grow_exact(len, additional) {
+                handle_error(err.into());
+            }
         }
-        Ok(())
     }
 
     /// Shrinks the buffer down to the specified capacity. If the given amount
@@ -395,9 +364,10 @@ impl<T> RawVec<T> {
     ///
     /// Aborts on OOM.
     #[cfg(not(no_global_oom_handling))]
-    pub fn shrink_to_fit(&mut self, cap: usize) {
-        if let Err(err) = self.shrink(cap) {
-            handle_error(err.into());
+    pub fn shrink_to_fit(&mut self, cap: usize) -> usize {
+        match self.shrink(cap) {
+            Ok(shrank_by) => shrank_by,
+            Err(err) => handle_error(err.into()),
         }
     }
 }
@@ -427,9 +397,15 @@ impl<T> RawVec<T> {
     // so that all of the code that depends on `T` is within it, while as much
     // of the code that doesn't depend on `T` as possible is in functions that
     // are non-generic over `T`.
-    fn grow_amortized(&mut self, len: usize, additional: usize) -> Result<(), RawVecError> {
+    fn grow_amortized(&mut self, len: usize, additional: usize) -> Result<usize, RawVecError> {
+        // since we set the capacity to usize::MAX when T has size 0,
+        // getting to here necessarily means the Vec is overfull.
+        assert_ne!(mem::size_of::<T>(), 0, "capacity overflow");
+
         // This is ensured by the calling contexts.
         debug_assert!(additional > 0);
+
+        let original_cap = self.cap.0;
 
         // Nothing we can really do about these checks, sadly.
         let required_cap = len.checked_add(additional).ok_or(RawVecError::CapacityOverflow)?;
@@ -445,7 +421,7 @@ impl<T> RawVec<T> {
         let ptr = finish_grow(new_layout, self.current_memory())?;
         // SAFETY: finish_grow would have resulted in a capacity overflow if we tried to allocate more than isize::MAX items
         unsafe { self.set_ptr_and_cap(ptr, cap) };
-        Ok(())
+        Ok(cap - original_cap)
     }
 
     // The constraints on this method are much the same as those on
@@ -465,10 +441,12 @@ impl<T> RawVec<T> {
     }
 
     #[cfg(not(no_global_oom_handling))]
-    fn shrink(&mut self, cap: usize) -> Result<(), RawVecError> {
+    fn shrink(&mut self, cap: usize) -> Result<usize, RawVecError> {
         assert!(cap <= self.capacity(), "Tried to shrink to a larger capacity");
 
-        let (ptr, layout) = if let Some(mem) = self.current_memory() { mem } else { return Ok(()) };
+        let original_cap = self.cap.0;
+
+        let (ptr, layout) = if let Some(mem) = self.current_memory() { mem } else { return Ok(0) };
         // See current_memory() why this assert is here
         assert_eq!(mem::size_of::<T>() % mem::align_of::<T>(), 0);
 
@@ -489,10 +467,9 @@ impl<T> RawVec<T> {
             unsafe {
                 self.ptr = NonNull::new_unchecked(ptr as *mut T);
                 self.cap = Cap(cap);
-                // self.set_ptr_and_cap(NonNull::new_unchecked(ptr as *mut T), cap);
             }
         }
-        Ok(())
+        Ok(original_cap - self.cap.0)
     }
 }
 
@@ -528,10 +505,14 @@ fn finish_grow(
 }
 
 // impl<T> Drop for RawVec<T> {
-//     /// Frees the memory owned by the `RawVec` *without* trying to drop its contents.
 //     fn drop(&mut self) {
-//         if let Some((ptr, layout)) = self.current_memory() {
-//             unsafe { std::alloc::dealloc(ptr.as_ptr(), layout) }
+//         let elem_size = mem::size_of::<T>();
+//
+//
+//         if self.cap.0 != 0 && elem_size != 0 {
+//             if let Some((ptr, layout)) = self.current_memory() {
+//                 unsafe { std::alloc::dealloc(ptr.as_ptr(), layout) }
+//             }
 //         }
 //     }
 // }
