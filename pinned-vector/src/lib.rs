@@ -53,6 +53,10 @@ use std::pin::Pin;
 use crate::raw_vec::RawVec;
 
 mod raw_vec;
+mod inner;
+mod tests;
+mod iter;
+mod iter_mut;
 
 /// A heap-allocated, growable array type analogous to the standard `Vec<T>`,
 /// but having pinned content which is not moved when resizing.
@@ -272,13 +276,12 @@ impl<T> PinnedVec<T> {
 
     #[inline]
     pub fn get(&self, index: usize) -> Pin<&T> {
-        let buffer_idx = self.get_buffer_index(index);
-        let idx = index - self.buffers_start[buffer_idx];
-        unsafe {
-            let val: *const T = self.buffers[buffer_idx].ptr().add(idx);
-            let pin = Pin::new_unchecked(&*val);
-            pin
-        }
+        unsafe { Pin::new_unchecked(self.get_unchecked(index)) }
+    }
+
+    #[inline]
+    pub fn get_unpin(&self, index: usize) -> &T where T: Unpin {
+        unsafe { self.get_unchecked(index) }
     }
 
     #[inline]
@@ -287,8 +290,7 @@ impl<T> PinnedVec<T> {
         let idx = index - self.buffers_start[buffer_idx];
         unsafe {
             let val: *mut T = self.buffers[buffer_idx].ptr().add(idx);
-            let pin = Pin::new_unchecked(&mut *val);
-            pin
+            Pin::new_unchecked(&mut *val)
         }
     }
 
@@ -324,87 +326,21 @@ impl<T> PinnedVec<T> {
                     buffer_idx = buffer_idx / 2;
                 }
                 if index >= self.buffers_start[buffer_idx] + self.buffers_len[buffer_idx] {
-                    buffer_idx += buffer_idx / 2;
+                    buffer_idx += 1 + buffer_idx / 2;
                 }
                 break;
             }
             buffer_idx
         }
     }
-}
 
-unsafe impl<T: Send> Send for PinnedVec<T> {}
-unsafe impl<T: Sync> Sync for PinnedVec<T> {}
-
-impl<T> From<Vec<T>> for PinnedVec<T> {
-    fn from(mut vec: Vec<T>) -> Self {
-        let cap = vec.capacity();
-        let len = vec.len();
-        PinnedVec {
-            buffers: vec![unsafe { RawVec::from_raw_parts(vec.leak().as_mut_ptr(), cap) }],
-            buffers_len: vec![len],
-            buffers_start: vec![0],
-            len,
-            cap,
+    #[inline]
+    unsafe fn get_unchecked(&self, index: usize) -> &T {
+        let buffer_idx = self.get_buffer_index(index);
+        let idx = index - self.buffers_start[buffer_idx];
+        unsafe {
+            let val: *const T = self.buffers[buffer_idx].ptr().add(idx);
+            &*val
         }
-    }
-}
-
-impl<T> Drop for PinnedVec<T> {
-    fn drop(&mut self) {
-        // TODO: iterate through all elements and drop them (can't pop because pop doesn't return the element because of pinning)
-
-        // while self.pop() {}
-        // deallocation is handled by RawVec
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn can_create() {
-        let vec: PinnedVec<i32> = PinnedVec::new(2);
-        assert_eq!(vec.len(), 0);
-        assert_eq!(vec.capacity(), 2);
-    }
-
-    #[test]
-    fn can_create_empty() {
-        let vec: PinnedVec<i32> = PinnedVec::new(0);
-        assert_eq!(vec.len(), 0);
-        assert_eq!(vec.capacity(), 0);
-    }
-
-    #[test]
-    fn can_create_from_vec() {
-        let vec = PinnedVec::from(vec![1, 2]);
-        assert_eq!(vec.len(), 2);
-        assert!(vec.capacity() >= 2);
-    }
-
-    #[test]
-    fn basic_push() {
-        let mut vec = PinnedVec::from(vec!["1".to_string(), "2".to_string()]);
-        assert_eq!(vec.len(), 2);
-        assert_eq!(vec.get(0).as_str(), "1");
-        assert_eq!(vec.get(1).as_str(), "2");
-        vec.push("3".to_string());
-        assert_eq!(vec.len(), 3);
-        assert_eq!(vec.get(0).as_str(), "1");
-        assert_eq!(vec.get(1).as_str(), "2");
-        assert_eq!(vec.get(2).as_str(), "3");
-    }
-
-    #[test]
-    fn shrink() {
-        let mut vec = PinnedVec::new(10);
-        vec.push(1);
-        vec.push(2);
-        vec.push(3);
-        assert!(vec.capacity() >= 10);
-        vec.shrink_to_fit();
-        assert_eq!(vec.capacity(), 3);
     }
 }
