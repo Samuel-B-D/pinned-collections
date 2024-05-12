@@ -48,7 +48,7 @@ impl<'v, T> Iterator for PinnedVecIter<'v, T> {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.cur, Some(self.vec.len))
+        (self.vec.len, Some(self.vec.len))
     }
 
     fn count(self) -> usize where Self: Sized {
