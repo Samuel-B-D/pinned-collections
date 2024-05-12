@@ -1,4 +1,3 @@
-use std::marker::PhantomData;
 use super::*;
 
 impl<T> PinnedVec<T> {
@@ -17,7 +16,6 @@ impl<'v, T> IntoIterator for &'v PinnedVec<T> {
             cur_buf: 0,
             cur_buf_end: self.buffers_len[0] - 1,
             vec: self,
-            phantom_data: PhantomData::default(),
         }
     }
 }
@@ -27,7 +25,6 @@ pub struct PinnedVecIter<'v, T> {
     cur_buf: usize,
     cur_buf_end: usize,
     vec: &'v PinnedVec<T>,
-    phantom_data: PhantomData<&'v T>,
 }
 
 impl<'v, T> Iterator for PinnedVecIter<'v, T> {

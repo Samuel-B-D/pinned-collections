@@ -59,6 +59,7 @@ mod inner;
 mod tests;
 mod iter;
 mod iter_mut;
+mod into_iter;
 
 /// A heap-allocated, growable array type analogous to the standard `Vec<T>`,
 /// but having pinned content which is not moved when resizing.

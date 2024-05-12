@@ -504,18 +504,18 @@ fn finish_grow(
     }
 }
 
-// impl<T> Drop for RawVec<T> {
-//     fn drop(&mut self) {
-//         let elem_size = mem::size_of::<T>();
-//
-//
-//         if self.cap.0 != 0 && elem_size != 0 {
-//             if let Some((ptr, layout)) = self.current_memory() {
-//                 unsafe { std::alloc::dealloc(ptr.as_ptr(), layout) }
-//             }
-//         }
-//     }
-// }
+impl<T> Drop for RawVec<T> {
+    fn drop(&mut self) {
+        let elem_size = mem::size_of::<T>();
+
+
+        if self.cap.0 != 0 && elem_size != 0 {
+            if let Some((ptr, layout)) = self.current_memory() {
+                unsafe { std::alloc::dealloc(ptr.as_ptr(), layout) }
+            }
+        }
+    }
+}
 
 // Central function for reserve error handling.
 #[cfg(not(no_global_oom_handling))]

@@ -1,5 +1,6 @@
 use core::fmt;
 use std::ops::Index;
+use std::ptr;
 use super::*;
 
 unsafe impl<T: Send> Send for PinnedVec<T> {}
@@ -57,9 +58,15 @@ impl<T> FromIterator<T> for PinnedVec<T> {
 
 impl<T> Drop for PinnedVec<T> {
     fn drop(&mut self) {
-        // TODO: iterate through all elements and drop them (can't pop because pop doesn't return the element because of pinning)
-
-        // while self.pop() {}
+        for i in 0..self.buffers.len() {
+            let buffer = &mut self.buffers[i];
+            let buffer_len = self.buffers_len[i];
+            for j in 0..buffer_len {
+                unsafe {
+                    let _v = ptr::read(buffer.ptr().add(j));
+                } // drop `_v`
+            }
+        }
         // deallocation is handled by RawVec
     }
 }

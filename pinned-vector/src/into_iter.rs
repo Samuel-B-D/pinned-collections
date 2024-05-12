@@ -1,17 +1,11 @@
 use super::*;
 
-impl<T> PinnedVec<T> {
-    pub fn iter_mut(&mut self) -> PinnedVecIterMut<T> {
-       self.into_iter()
-    }
-}
-
-impl<'v, T> IntoIterator for &'v mut PinnedVec<T> {
-    type Item = Pin<&'v mut T>;
-    type IntoIter = PinnedVecIterMut<'v, T>;
+impl<T> IntoIterator for PinnedVec<T> {
+    type Item = Pin<Box<T>>;
+    type IntoIter = PinnedVecIntoIter<T>;
 
     fn into_iter(self) -> Self::IntoIter {
-        PinnedVecIterMut {
+        Self::IntoIter {
             cur: 0,
             cur_buf: 0,
             cur_buf_end: self.buffers_len[0] - 1,
@@ -20,15 +14,15 @@ impl<'v, T> IntoIterator for &'v mut PinnedVec<T> {
     }
 }
 
-pub struct PinnedVecIterMut<'v, T> {
+pub struct PinnedVecIntoIter<T> {
     cur: usize,
     cur_buf: usize,
     cur_buf_end: usize,
-    vec: &'v mut PinnedVec<T>,
+    vec: PinnedVec<T>,
 }
 
-impl<'v, T> Iterator for PinnedVecIterMut<'v, T> {
-    type Item = Pin<&'v mut T>;
+impl<T> Iterator for PinnedVecIntoIter<T> {
+    type Item = Pin<Box<T>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.cur > self.cur_buf_end {
@@ -43,7 +37,7 @@ impl<'v, T> Iterator for PinnedVecIterMut<'v, T> {
         unsafe {
             let val: *mut T = self.vec.buffers[self.cur_buf].ptr().add(self.cur);
             self.cur += 1;
-            Some(Pin::new_unchecked(&mut *val))
+            Some(Pin::new_unchecked(Box::from_raw(val)))
         }
     }
 

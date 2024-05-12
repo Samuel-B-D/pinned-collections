@@ -64,9 +64,11 @@ mod tests {
         assert_eq!(vec[5], 6);
         assert_eq!(vec.get_unpin(6), &7);
         vec.iter_mut().for_each(|mut v| v.as_mut().add_assign(1));
+        let mut i = 0;
         for x in vec.iter() {
-            println!("{x}");
+            i += x;
         }
+        assert_eq!(i, 35);
     }
 
     #[test]
