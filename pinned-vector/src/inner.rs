@@ -1,3 +1,5 @@
+use core::fmt;
+use std::ops::Index;
 use super::*;
 
 unsafe impl<T: Send> Send for PinnedVec<T> {}
@@ -16,6 +18,31 @@ impl<T> From<Vec<T>> for PinnedVec<T> {
         }
     }
 }
+
+impl<T> Index<usize> for PinnedVec<T> {
+    type Output = T;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        unsafe { self.get_unchecked(index) }
+    }
+}
+
+impl<T: fmt::Debug> fmt::Debug for PinnedVec<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[")?;
+        let mut first = true;
+        for v in self {
+            if first {
+                first = false;
+            } else {
+                write!(f, ", ")?;
+            }
+            fmt::Debug::fmt(v, f)?;
+        }
+        write!(f, "]")
+    }
+}
+
 
 impl<T> Drop for PinnedVec<T> {
     fn drop(&mut self) {

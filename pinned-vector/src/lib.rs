@@ -49,6 +49,8 @@
 //! let two = v.pop();
 //! ```
 
+extern crate core;
+
 use std::pin::Pin;
 use crate::raw_vec::RawVec;
 

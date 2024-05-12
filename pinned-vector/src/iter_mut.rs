@@ -1,5 +1,4 @@
 use std::marker::PhantomData;
-use crate::iter::PinnedVecIter;
 use super::*;
 
 impl<T> PinnedVec<T> {

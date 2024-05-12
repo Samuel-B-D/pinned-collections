@@ -8,7 +8,7 @@ impl<T> PinnedVec<T> {
 }
 
 impl<'v, T> IntoIterator for &'v PinnedVec<T> {
-    type Item = Pin<&'v T>;
+    type Item = &'v T;
     type IntoIter = PinnedVecIter<'v, T>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -31,7 +31,7 @@ pub struct PinnedVecIter<'v, T> {
 }
 
 impl<'v, T> Iterator for PinnedVecIter<'v, T> {
-    type Item = Pin<&'v T>;
+    type Item = &'v T;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.cur > self.cur_buf_end {
@@ -49,7 +49,7 @@ impl<'v, T> Iterator for PinnedVecIter<'v, T> {
         unsafe {
             let val: *const T = self.vec.buffers[self.cur_buf].ptr().add(self.cur);
             self.cur += 1;
-            Some(Pin::new_unchecked(&*val))
+            Some(&*val)
         }
     }
 

@@ -57,15 +57,22 @@ mod tests {
         vec.push(6);
         vec.push(7);
         assert_eq!(vec.get_unpin(0), &1);
-        assert_eq!(vec.get_unpin(1), &2);
-        assert_eq!(vec.get_unpin(2), &3);
-        assert_eq!(vec.get_unpin(3), &4);
-        assert_eq!(vec.get_unpin(4), &5);
-        assert_eq!(vec.get_unpin(5), &6);
+        assert_eq!(vec.get(1).get_ref(), &2);
+        assert_eq!(*vec.get(2).get_ref(), 3);
+        assert_eq!(*vec.get_unpin(3), 4);
+        assert_eq!(vec[4], 5);
+        assert_eq!(vec[5], 6);
         assert_eq!(vec.get_unpin(6), &7);
         vec.iter_mut().for_each(|mut v| v.as_mut().add_assign(1));
         for x in vec.iter() {
             println!("{x}");
         }
+    }
+
+    #[test]
+    fn debug_print() {
+        let vec = PinnedVec::from(vec![1, 2, 3]);
+        let dbg = format!("{vec:?}");
+        assert_eq!(dbg.as_str(), "[1, 2, 3]");
     }
 }
