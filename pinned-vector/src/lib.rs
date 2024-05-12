@@ -227,12 +227,17 @@ impl<T> PinnedVec<T> {
     #[inline]
     pub fn push(&mut self, value: T) {
         if self.len == self.cap {
-            let new_buffer_capacity = (self.cap * 2).max(1);
-            self.buffers.push(RawVec::with_capacity(new_buffer_capacity));
-            self.buffers_len.push(0);
-            let prev_buffer_idx = self.buffers_start.len() - 1;
-            self.buffers_start.push(self.buffers_start[prev_buffer_idx] + self.buffers_len[prev_buffer_idx]);
-            self.cap += new_buffer_capacity;
+            if self.cap == 0 {
+                let grew_by = self.buffers[0].grow_one();
+                self.cap += grew_by;
+            } else {
+                let new_buffer_capacity = (self.cap * 2).max(1);
+                self.buffers.push(RawVec::with_capacity(new_buffer_capacity));
+                self.buffers_len.push(0);
+                let prev_buffer_idx = self.buffers_start.len() - 1;
+                self.buffers_start.push(self.buffers_start[prev_buffer_idx] + self.buffers_len[prev_buffer_idx]);
+                self.cap += new_buffer_capacity;
+            }
         }
 
         let last_idx = self.buffers_len.len() - 1;
@@ -316,24 +321,22 @@ impl<T> PinnedVec<T> {
     }
 
     fn get_buffer_index(&self, index: usize) -> usize {
-        unsafe {
-            let buffers_len = self.buffers.len();
-            if buffers_len == 1 {
-                return 0
-            }
-
-            let mut buffer_idx = buffers_len / 2;
-            loop {
-                if index < self.buffers_start[buffer_idx] {
-                    buffer_idx = buffer_idx / 2;
-                }
-                if index >= self.buffers_start[buffer_idx] + self.buffers_len[buffer_idx] {
-                    buffer_idx += 1 + buffer_idx / 2;
-                }
-                break;
-            }
-            buffer_idx
+        let buffers_len = self.buffers.len();
+        if buffers_len == 1 {
+            return 0
         }
+
+        let mut buffer_idx = buffers_len / 2;
+        loop {
+            if index < self.buffers_start[buffer_idx] {
+                buffer_idx = buffer_idx / 2;
+            }
+            if index >= self.buffers_start[buffer_idx] + self.buffers_len[buffer_idx] {
+                buffer_idx += 1 + buffer_idx / 2;
+            }
+            break;
+        }
+        buffer_idx
     }
 
     #[inline]

@@ -75,4 +75,21 @@ mod tests {
         let dbg = format!("{vec:?}");
         assert_eq!(dbg.as_str(), "[1, 2, 3]");
     }
+
+    #[test]
+    fn grow_from_zeroed_capacity() {
+        let mut vec = PinnedVec::new(0);
+        vec.push(1);
+        vec.push(2);
+        vec.push(3);
+        vec.push(4);
+        assert_eq!(format!("{vec:?}").as_str(), "[1, 2, 3, 4]");
+    }
+
+    #[test]
+    fn from_iter() {
+        let vec = vec![2, 4, 5, 6];
+        let pinned_vec: PinnedVec<_> = vec.into_iter().collect();
+        assert_eq!(format!("{pinned_vec:?}").as_str(), "[2, 4, 5, 6]");
+    }
 }

@@ -6,7 +6,7 @@ unsafe impl<T: Send> Send for PinnedVec<T> {}
 unsafe impl<T: Sync> Sync for PinnedVec<T> {}
 
 impl<T> From<Vec<T>> for PinnedVec<T> {
-    fn from(mut vec: Vec<T>) -> Self {
+    fn from(vec: Vec<T>) -> Self {
         let cap = vec.capacity();
         let len = vec.len();
         PinnedVec {
@@ -43,6 +43,17 @@ impl<T: fmt::Debug> fmt::Debug for PinnedVec<T> {
     }
 }
 
+impl<T> FromIterator<T> for PinnedVec<T> {
+    fn from_iter<I: IntoIterator<Item=T>>(iter: I) -> Self {
+        let iter = iter.into_iter();
+        let (lower, _) = iter.size_hint();
+        let mut pinned_vec = PinnedVec::new(lower.max(2));
+        for v in iter {
+            pinned_vec.push(v);
+        }
+        pinned_vec
+    }
+}
 
 impl<T> Drop for PinnedVec<T> {
     fn drop(&mut self) {
