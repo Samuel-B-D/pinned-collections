@@ -41,9 +41,6 @@ impl<'v, T> Iterator for PinnedVecIterMut<'v, T> {
             self.cur_buf += 1;
             self.cur = 0;
             self.cur_buf_end = self.vec.buffers_len[self.cur_buf] - 1;
-            if self.cur_buf_end < 0 {
-                return None;
-            }
         }
 
         unsafe {

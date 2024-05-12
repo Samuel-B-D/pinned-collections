@@ -92,4 +92,23 @@ mod tests {
         let pinned_vec: PinnedVec<_> = vec.into_iter().collect();
         assert_eq!(format!("{pinned_vec:?}").as_str(), "[2, 4, 5, 6]");
     }
+
+    #[test]
+    fn is_contiguous_from_vec() {
+        let vec: PinnedVec<usize> = PinnedVec::from(vec![]);
+        assert!(vec.is_contiguous());
+
+        let vec = PinnedVec::from(vec![1]);
+        assert!(vec.is_contiguous());
+
+        let vec = PinnedVec::from(vec!["a", "b", "c"]);
+        assert!(vec.is_contiguous());
+    }
+
+    #[test]
+    fn is_contiguous_from_iter() {
+        let vec = vec![2, 4, 5, 6];
+        let pinned_vec: PinnedVec<_> = vec.into_iter().collect();
+        assert!(pinned_vec.is_contiguous());
+    }
 }

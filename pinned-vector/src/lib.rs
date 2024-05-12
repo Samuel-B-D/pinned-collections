@@ -311,6 +311,11 @@ impl<T> PinnedVec<T> {
             std::ptr::write(ptr, value);
         }
     }
+
+    #[inline]
+    pub fn is_contiguous(&self) -> bool {
+        self.buffers.len() == 1
+    }
 }
 
 /// Private utilities
